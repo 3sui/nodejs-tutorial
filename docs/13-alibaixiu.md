@@ -928,6 +928,8 @@ npm i jquery-validation
 ```html
 <script src="jquery.js"></script>
 <script src="jquery.validate.js"></script>
+<!-- jquery-validation 默认的提示消息是英文，引入该文件让其显式中文 -->
+<script src="messages_zh.js"></script>
 ```
 
 配置验证规则
@@ -989,14 +991,6 @@ $("#signupForm").validate({
 
 
 
-插件默认提示消息是英文的，可以修改默认文本提示语言，例如这里改成中文
-
-```html
-<script src="jquery.js"></script>
-<script src="/node_modules/jquery-validation/dist/jquery.validate.js"></script>
-<!-- 只需要加载该语言包文件，就会把英文变为中文 -->
-<script src="/node_modules/jquery-validation/dist/localization/messages_zh.js"></script>
-```
 如果想自定义错误提示消息，则可以通过 `messages` 选项自定义
 
 ```javascript
@@ -1060,7 +1054,6 @@ form label.error {
 
 form input.error {
   border: 1px solid red !important;
-  inset 0 1px 1px rgba(0,0,0,.075);
 }
 
 form input.valid {
@@ -1072,28 +1065,69 @@ form input.valid {
 
 
 
-异步验证
+异步验证（只是提高用户体验，减小服务器压力）
 
 - remote
+  - 指定一个接口地址，它会自动发请求
+  - 要求接口返回 true 或者 false
+  - true 验证通过
+  - false 验证失败
 - 接口
+  - 返回 true 或者 false
 
 
 
-### 删除用户
+### 删除用户（作业）
 
-### 编辑用户
+### 编辑用户（作业）
 
+### 密码加密问题
 
+哈希散列算法Hash
+是把任意长度的输入（又叫做预映射pre-image）通过散列算法变换成固定长度的输出
+输出就是散列值
+不可能从散列值来确定唯一的输入值，说白了就是不能解密
+
+哈希特点：
+- 只能加，不能解
+- 相同的字符串得到的加密结果永远是一样的
+- 用户登录
+  - 把用户输入的明文加密然后和数据库存储的密码进行比对
+
+常用 hash  算法
+
+- md4
+- md5
+- sha1
+- ...
+
+e10adc3949ba59abbe56e057f20f883e
+
+Hash 破解问题,暴力破解，穷举尝试
+1 dsajbfdjbsafsa
+2 bdsabdkjsab
+3 bdsjab kjdsa
+4 djsabdsa
+12 djsabdjsa
+123 djsabjdbsa
+123456 e10adc3949ba59abbe56e057f20f883e
+1@23465 e10adc3949ba59abbe56e057f20f88ddsa
+1@23465 ysyhljt
 
 ## 用户登录
 
 - 基本登录流程处理
+
+  - 校验用户名是否存在
+  - 校验密码是否正确
+
 - 记录用户登录状态
+
 - 基本的页面访问权限认真，如果用户没有登录，则让用户跳转到登录页面进行登录
 
   ![用户登录处理流程](http://assets.processon.com/chart_image/5c419e62e4b056ae29f51eab.png)
 
-## 找回密码
+## 找回密码（*）
 
 - [找回密码的功能设计](http://www.ruanyifeng.com/blog/2019/02/password.html)
 
@@ -1102,9 +1136,21 @@ form input.valid {
 ### Cookie 和 Session
 
 - HTTP 协议本身是无状态的
-
 - Cookie 发橘子，往背后贴纸条
+  - 纸条就是Cookie
+  - Cookie 是存储在客户端
+  - 不适合存储涉及安全敏感数据
+  - 有大小限制，2kb
 - Session 超市存物柜，东西放到柜子里，你拿着小票
+  - 超市服务器，你就是客户端
+  - 你去超市购物，就是会话的一个过程
+  - 存物柜在超市，也就是说 Session 是把数据存储在服务器
+  - 超市签发生成一个小票给你，以 Cookie 的方式保存在客户端
+  - 小票由服务端签发生成，每个小票都不一样，所以客户端无法轻易伪造
+  - Session 是基于 Cookie 实现的
+  - Cookie 中存储访问 Session 数据的凭证
+  - 每个人的 Cookie 凭证都不一样
+  - 由于凭证是服务器签发生成的，所以客户端无法轻易伪造
 
 ### 使用 Session 存储登录状态
 
@@ -1147,9 +1193,45 @@ req.session.名字 = 值
 req.session.名字
 ```
 
+4. 这里我们需要在用户登录成功以后记录用户的登录状态
+
+```javascript
+router.post('/api/users/login', (req, res, next) => {
+  ...
+  ...
+  ...
+  
+  // 将用户登录状态记录到 Session 中
+  // user 就是我们从数据库中查询到的用户数据对象
+  req.session.user = user
+
+  res.status(200).json({
+    success: true,
+    message: '登录成功'
+  })
+})
+
+```
+
 
 
 ### 页面访问权限控制
+
+简单一点，直接在处理页面渲染的路由中进行判定，如果没有登录，则让其跳转到登录页，否则，正常渲染页面
+
+```javascript
+router.get('/admin', (req, res) => {
+  const sessionUser = req.session.user
+
+  if (!sessionUser) {
+    return res.redirect('/admin/login')
+  }
+
+  res.render('admin/index.html')
+})
+```
+
+如果在每一个需要验证的页面访问路由中都做上面那样的判定就会很麻烦，所以我们可以利用中间件的方式来统一处理页面的登录状态校验
 
 ```javascript
 /**
@@ -1180,17 +1262,54 @@ app.use('/admin', (req, res, next) => {
 
 ```
 
+为了好维护，建议将这种中间件处理封装到独立的模块中，这里我们把这个处理过程封装到了 `middlewares/check-login.js` 文件模块中
+
+```javascript
+module.exports = (req, res, next) => { // 所有以 /admin/ 开头的请求都会进入这个中间件
+  // 1. 如果是 /admin/login 则直接允许通过
+  if (req.originalUrl === '/admin/login') {
+    return next()
+  }
+
+  // 2. 非 /admin/login 的页面都校验登录状态
+  const sessionUser = req.session.user
+  // 2.1 如果没有则让其去登录
+  if (!sessionUser) {
+    return res.redirect('/admin/login')
+  }
+  
+  // 2.2 如果登录了则让其通过
+  next()
+}
+
+```
+
+然后在 `app.js` 中挂载这个中间件
+
+```javascript
+...
+const checkLogin = require('./middlewares/check-login.js')
+...
+
+app.use('/admin', checkLogin)
+...
+```
+
+
+
 ### 用户退出
 
-- 实现用户退出接口
+首先实现用户退出数据接口
 
 ```javascript
 /**
  * 用户退出
  */
-router.get('/admin/logout', (req, res) => {
+router.get('/admin/users/logout', (req, res) => {
   // 1. 清除登录状态
   delete req.session.user
+  
+  // 2. 记录用户的退出时间
   
   // 2. 跳转到登录页
   res.redirect('/admin/login')
@@ -1198,22 +1317,17 @@ router.get('/admin/logout', (req, res) => {
 
 ```
 
-- 使用 Ajax 请求完成用户退出
+然后将顶部的退出按钮的链接指向数据接口
 
+```html
+...
+<li><a href="/admin/users/logout"><i class="fa fa-sign-out"></i>退出</a></li>
+...
+```
 
+`delete` 是 JavaScript 的一个关键字，用来删除对象成员的
 
-### 展示当前登录用户信息
-
-> 参考文档：http://expressjs.com/en/4x/api.html#app.locals
-
-- 把 Session 中的当前登录用户数据传递到页面模板中
-- app.locals 的应用
-
-简单点就是在每一次 render 页面的时候，把 req.session.user 传到模板中去使用。
-
-当你需要在多个模板中使用相同的模板数据的时候，每一次 render 传递就麻烦了。所以 express  提供了一种简单的方式，我们可以把模板中公用的数据放到 `app.locals` 中。`app.locals` 中的数据可以在模板中直接使用。
-
-
+![1551859111822](./assets/1551859111822.png)
 
 ### Session 数据持久化
 
@@ -1266,13 +1380,29 @@ app.use(session({
 ...
 ```
 
+### 展示当前登录用户信息
+
+> 参考文档：http://expressjs.com/en/4x/api.html#app.locals
+
+
+
+简单点就是在每一次 render 页面的时候，把 `req.session.user` 传到模板中去使用。
+
+当你需要在多个模板中使用相同的模板数据的时候，每一次 render 传递就麻烦了。所以 express  提供了一种简单的方式，我们可以把模板中公用的数据放到 `app.locals` 中。`app.locals` 中的数据可以在模板中直接使用。
+
+```javascript
+app.use('/admin', checkLogin, (req, res, next) => { // 只有在 checkLogin 中 next 了，才会执行这个中间件
+  app.locals.sessionUser = req.session.user
+  next()
+})
+
+```
+
 
 
 ### 记住我（*）
 
 ![记住我处理流程](http://assets.processon.com/chart_image/5c419ffce4b048f108d5ce97.png)
-
-
 
 对称加解密：加解密使用的私钥必须一致。
 
@@ -1457,6 +1587,12 @@ app.post('/cool-profile', cpUpload, function (req, res, next) {
 - 下载
 - 使用
 - 配置
+
+
+
+富文本编辑器图片上传
+
+![1551870035033](./assets/1551870035033.png)
 
 ### 文章列表
 
