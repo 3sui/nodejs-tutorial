@@ -1512,6 +1512,7 @@ app.post('/profile', upload.single('avatar'), function (req, res, next) {
   // req.body 是请求体中的那些普通的文本字段
   // 数据库中不存储文件，文件还是存储在磁盘上，数据库中存储文件在我们 Web 服务中的 url 资源路径
 })
+
 ```
 
 3. multer 保存的文件默认没有后缀名，如果需要的话，就需要下面这样来使用
@@ -1596,7 +1597,176 @@ app.post('/cool-profile', cpUpload, function (req, res, next) {
 
 ### 文章列表
 
+### 批量删除文章
+
+客户端
+
+```javascript
+function handleBatchDelete() {
+  if (!window.confirm('确认删除吗?')) {
+    return
+  }
+  // 1. 找到所有选中行的数据项 id
+  var ids = []
+  $('#posts_container tr input[name=checkbox1]').each(function (index, item) {
+    if (item.checked) {
+      // $(item).data('id')
+      ids.push(item.dataset.id)
+    }
+  })
+
+  // 2. 发请求，等待响应
+  $.ajax({
+    url: '/api/posts/delete',
+    method: 'GET',
+    data: {
+      id: ids.join(',')
+    },
+    dataType: 'json',
+    success: function (resData) {
+      if (resData.success) {
+        // 刷新当前网页，重新渲染数据列表
+        window.location.reload()
+      }
+    },
+    error: function (err) {
+      console.log(err)
+    }
+  })
+  // 3. 根据响应结果进行后续处理
+}
+```
+
+数据接口
+
+```javascript
+/**
+ * 批量删除文章
+ */
+router.get('/api/posts/delete', (req, res, next) => {
+  // 1. 获取要删除的数据 id
+  const { id } = req.query
+  console.log(id) // 1,2,3,4,5
+  
+  // 2. 数据库操作
+  db.query(`DELETE FROM ali_article WHERE article_id IN(${id})`, (err, ret) => {
+    if (err) {
+      return next(err)
+    }
+
+    // 3. 发送响应
+    res.status(200).json({
+      success: true
+    })
+  })
+})
+```
+
+
+
 ### 编辑文章
+
+#### 动态显示编辑文章页面
+
+这里我们可以直接使用服务端渲染的方式动态渲染编辑文章页面
+
+```javascript
+router.get('/admin/posts/edit', (req, res, next) => {
+  db.query('SELECT * FROM `ali_article` WHERE `article_id`=?', [req.query.id], (err, ret) => {
+    if (err) {
+      return next(err)
+    }
+    db.query('SELECT * FROM `ali_cate`', (err, categories) => {
+      if (err) {
+        return next(err)
+      }
+      res.render('admin/posts-edit.html', {
+        post: ret[0], // 文章详情
+        categories // 分类列表
+      })
+    })
+  })
+})
+```
+
+然后在 `posts-edit.html` 页面绑定 `post` 和 `categories` 数据。
+
+#### 提交编辑
+
+客户端
+
+```javascript
+function handleAdd() {
+  var formData = $('#add_form').serialize()
+
+  // 方式1，自己拼
+  formData += '&article_body=' + editor.txt.html()
+
+  // 方式2：将富文本编辑器的容器改为 textarea
+  //        参考文档：https://www.kancloud.cn/wangfupeng/wangeditor3/430149
+  $.ajax({
+    url: '/api/posts/edit?id=' + $('#article_id').val(),
+    method: 'POST',
+    data: formData,
+    dataType: 'json',
+    success: function (resData) {
+      if (resData.success) {
+        window.alert('修改成功')
+      }
+    },
+    error: function (err) {
+      console.log(err)
+    }
+  })
+}
+```
+
+
+
+没有选新文件的表单提交
+
+![1552019045020](./assets/1552019045020.png)
+
+有文件的表单数据
+
+![1552019250524](./assets/1552019250524.png)
+
+最后，在接口中就判断是否有 new_file，如果有就用，如果没有就用 盘original_file。
+
+服务端处理
+
+```javascript
+/**
+ * 编辑文章
+ */
+router.post('/api/posts/edit', (req, res, next) => {
+  const { id } = req.query
+  const body = req.body
+  db.query(
+    'UPDATE `ali_article` SET `article_title`=?, `article_body`=?, `article_cateid`=?, `article_slug`=?, `article_addtime`=?, `article_status`=?, `article_file`=? WHERE `article_id`=?',
+    [
+      body.article_title,
+      body.article_body,
+      body.article_cateid,
+      body.article_slug,
+      body.article_addtime,
+      body.article_status,
+      body.new_file || body.original_file,
+      id
+    ],
+    (err, ret) => {
+      if (err) {
+        return next(err)
+      }
+      res.status(200).json({
+        success: true
+      })
+    }
+  )
+})
+```
+
+
 
 ### 删除文章
 
@@ -1612,32 +1782,96 @@ app.post('/cool-profile', cpUpload, function (req, res, next) {
 
 ## 发布上线
 
-- 服务器
+- 24 小时不关机的电脑
+  - 云服务
+
+- 服务器操作系统
   - Windows（Windows Server / win7 / win10）
   - **Linux**（CentOS / Ubuntu / Redhat）
+- 云服务
+  - 阿里云
+  - 腾讯云
+  - ...
 - Web 服务器软件
-- 域名
+- 项目源代码
+- 域名（不是必须）
 
 ### 服务器购买及配置
 
 - [阿里云](https://www.aliyun.com/)
-- 产品
 - 云服务器 ECS
-- 立即购买
-- 注册账号
-- 镜像的选择
-- 存储
-- 
+- 乞丐版
+- 操作系统选择：Linux
+  - CentOS、**Ubuntu**、Fedora、....
+- 在购买好的主机的后台管理系统中，会告诉你这个机器的
+  - ip地址
+  - 连接端口号
+  - 默认是 root 用户
+  - 密码由你自己设定
+
+- 备案
+  - 香港节点不用备案
 
 ### 连接到远程服务器
 
+SSH主要用于远程登录。假定你要以用户名user，登录远程主机host，只要一条简单命令就可以了。
+
+```bash
+ssh user@host
+```
+
+如果本地用户名与远程用户名一致，登录时可以省略用户名。
+
+```bash
+ssh host
+```
+
+SSH的默认端口是22，也就是说，你的登录请求会送进远程主机的22端口。使用p参数，可以修改这个端口。
+
+```bash
+ssh -p 2222 user@host
+```
+
+上面这条命令表示，ssh直接连接远程主机的2222端口。
+
+
+
 ### 安装及配置 Web 服务器软件
+
+让服务运行在后台，注意，
+
+- forever
+- pm2
 
 ### 上传网站到服务器
 
+- 把代码传到 github 或者 码云之类的云仓库
+- 服务端使用 git  去下载和更新你的源代码
+
 ### 域名购买及解析
+
+ip地址
+
+- 买域名
+
+- 配置域名指向你的服务器 ip 地址
+
+  
 
 ### 总结
 
-
+- 多个网站服务
+- 一个网站服务对应一个域名
+- 80 端口号只能被占用一次
+- 如果想要在一台计算机上提供多个网站服务，如何都使用 80 端口号
+- 配置反向代理服务器
+- 三个网站
+  - www.a.com  192.168.1.125:80
+  - www.b.com  192.168.1.125:80
+  - www.c.com  192.168.1.125:80
+- nginx
+  - 监听 80
+  - www.a.com 127.0.0.1:3000
+  - www.b.com  127.0.0.1:4000
+  - www.c.com  127.0.0.1:5000
 
