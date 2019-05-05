@@ -1,5 +1,9 @@
 # 第16章 其他
 
+## Node.js 最佳实践
+
+- <https://github.com/i0natan/nodebestpractices>
+
 ## Node 面试资源
 
 - [ElemeFE / node-interview](https://github.com/ElemeFE/node-interview)
@@ -63,3 +67,4 @@ nvm use <version>
 
 - [JavaScript Standard Style](https://github.com/standard/standard)
 - [Airbnb JavaScript Style Guide](https://github.com/airbnb/javascript)
+
